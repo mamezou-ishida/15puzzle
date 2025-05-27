@@ -1,9 +1,10 @@
 // グローバル定数と変数
-const CANVAS_SIZE = 400;
+const MAX_PUZZLE_WIDTH = 500;
+const MIN_PUZZLE_WIDTH = 240; // パズルの最小幅
+let currentPuzzleWidth;       // 現在のパズル（キャンバス）の幅
 const GRID_COUNT = 4; // 4x4のグリッド
 let squareSize;       // 各正方形（タイル）の一辺の長さ
 let borderThickness;  // グリッド周囲の枠の太さ
-
 // 色の定義 (setup内でp5.Colorオブジェクトとして初期化)
 let frameColor;                 // 外枠の色 (濃い木目調)
 let puzzleAreaBackgroundColor;  // タイルが置かれるエリアの背景色 (中間色の木目調)
@@ -40,14 +41,17 @@ let firstMoveMadeAfterScramble = false;
 let isPuzzleSolved = false;
 let hasBeenScrambled = false; // パズルがスクランブルされたかどうかのフラグ
 let defaultTimerColor;
+// タッチ操作関連
+let touchStartX = 0;
+let touchStartY = 0;
+let isTouchActive = false;
+const SWIPE_THRESHOLD = 40; // スワイプと判定する最小距離 (ピクセル)
 
 function setup() {
-  createCanvas(CANVAS_SIZE, CANVAS_SIZE);
+  // 初期寸法の計算とキャンバス作成
+  calculateAndUpdateDimensions();
+  createCanvas(currentPuzzleWidth, currentPuzzleWidth);
 
-  // 寸法計算
-  // squareSize * (GRID_COUNT + 1/2) = CANVAS_SIZE という関係から導出
-  squareSize = (2 * CANVAS_SIZE) / (2 * GRID_COUNT + 1);
-  borderThickness = squareSize / 4;
 
   // 色の初期化
   frameColor = color(85, 57, 30);
@@ -63,10 +67,10 @@ function setup() {
 
   // UIコンテナの作成 (ボタンとタイマーを中央揃えにするため)
   uiContainer = createDiv('');
-  uiContainer.style('width', CANVAS_SIZE + 'px');
+  uiContainer.style('width', currentPuzzleWidth + 'px');
   uiContainer.style('text-align', 'center'); // コンテナ内のブロック要素を中央揃えにするための準備
   // キャンバスの下に配置 (キャンバスが(0,0)にあると仮定)
-  uiContainer.position(0, CANVAS_SIZE + borderThickness / 2 + 5); // Y位置を調整
+  uiContainer.position(0, currentPuzzleWidth + 15); // Y位置を調整 (固定オフセット)
 
   // スクランブルボタンの作成と設定
   scrambleButton = createButton('Scramble (S)');
@@ -111,6 +115,25 @@ function setup() {
   timerDisplay.style('font-size', '30px');
   timerDisplay.style('color', defaultTimerColor.toString());
   timerDisplay.style('margin', '0 auto'); // 中央揃え
+}
+
+function windowResized() {
+  calculateAndUpdateDimensions();
+  resizeCanvas(currentPuzzleWidth, currentPuzzleWidth);
+}
+
+function calculateAndUpdateDimensions() {
+  currentPuzzleWidth = min(windowWidth, MAX_PUZZLE_WIDTH);
+  currentPuzzleWidth = max(currentPuzzleWidth, MIN_PUZZLE_WIDTH);
+
+  // squareSize * (GRID_COUNT + 1/2) = currentPuzzleWidth という関係から導出
+  squareSize = (2 * currentPuzzleWidth) / (2 * GRID_COUNT + 1);
+  borderThickness = squareSize / 4;
+
+  if (uiContainer) { // setup完了後に呼ばれる場合があるためチェック
+    uiContainer.style('width', currentPuzzleWidth + 'px');
+    uiContainer.position(0, currentPuzzleWidth + 15);
+  }
 }
 
 function initializeGrid() {
@@ -383,4 +406,89 @@ function checkIfSolved() {
       timerDisplay.style('color', 'red');
     }
   }
+}
+
+function touchStarted() {
+  // マウス座標がキャンバス内にあるかチェック
+  if (mouseX >= 0 && mouseX <= currentPuzzleWidth && mouseY >= 0 && mouseY <= currentPuzzleWidth) {
+    if (touches.length > 0) { // p5.jsのtouches配列で実際のタッチを検出
+      touchStartX = mouseX; // mouseX/Y はタッチイベント中、タッチ座標を反映
+      touchStartY = mouseY;
+      isTouchActive = true;
+      return false; // ブラウザのデフォルトのタッチ動作（スクロールなど）を抑制
+    } else {
+      // touches.length === 0 の場合、マウスイベントかもしれないのでデフォルト動作を許可
+      // ただし、モバイルデバイスでは通常ここには来ないはず
+      return true;
+    }
+  }
+  return true; // キャンバス外のタッチはデフォルト動作を許可
+}
+
+function touchEnded() {
+  if (!isTouchActive) {
+    return true;  // isTouchActiveがfalseなら、このイベントは無視してデフォルト動作を許可
+  }
+
+  if (isAnimating) {
+    return false; // アニメーション中は新しい操作を無視し、デフォルト動作を抑制
+  }
+
+  let touchEndX = mouseX; // mouseX/Y はタッチイベント中、タッチ座標を反映
+  let touchEndY = mouseY;
+
+  let dx = touchEndX - touchStartX;
+  let dy = touchEndY - touchStartY;
+
+  let tileToMoveR = -1;
+  let tileToMoveC = -1;
+
+  // スワイプ距離が閾値を超えているか、かつタッチ開始点がパズルグリッド内か確認
+  const puzzleAreaX1 = borderThickness;
+  const puzzleAreaY1 = borderThickness;
+  const puzzleAreaX2 = borderThickness + GRID_COUNT * squareSize;
+  const puzzleAreaY2 = borderThickness + GRID_COUNT * squareSize;
+
+  if ((abs(dx) > SWIPE_THRESHOLD || abs(dy) > SWIPE_THRESHOLD) &&
+      (touchStartX > puzzleAreaX1 && touchStartX < puzzleAreaX2 &&
+       touchStartY > puzzleAreaY1 && touchStartY < puzzleAreaY2)) {
+
+    if (abs(dx) > abs(dy)) { // 水平スワイプ
+      if (dx > 0 && emptyCol > 0) { // 右へスワイプ -> 空白の左のタイルを移動
+        tileToMoveR = emptyRow;
+        tileToMoveC = emptyCol - 1;
+      } else if (dx < 0 && emptyCol < GRID_COUNT - 1) { // 左へスワイプ -> 空白の右のタイルを移動
+        tileToMoveR = emptyRow;
+        tileToMoveC = emptyCol + 1;
+      }
+    } else { // 垂直スワイプ
+      if (dy > 0 && emptyRow > 0) { // 下へスワイプ -> 空白の上のタイルを移動
+        tileToMoveR = emptyRow - 1;
+        tileToMoveC = emptyCol;
+      } else if (dy < 0 && emptyRow < GRID_COUNT - 1) { // 上へスワイプ -> 空白の下のタイルを移動
+        tileToMoveR = emptyRow + 1;
+        tileToMoveC = emptyCol;
+      }
+    }
+  }
+
+  if (tileToMoveR !== -1) {
+    isAnimating = true;
+    animationProgress = 0;
+    animatingTileValue = grid[tileToMoveR][tileToMoveC];
+    animatingTileStartGridR = tileToMoveR;
+    animatingTileStartGridC = tileToMoveC;
+    animatingTileTargetGridR = emptyRow;
+    animatingTileTargetGridC = emptyCol;
+  }
+  isTouchActive = false; // ここでフラグをリセット
+  return false; // スワイプ処理後は常にデフォルト動作を抑制
+}
+
+function touchMoved() {
+  // キャンバス内でのタッチ移動であれば、デフォルトのスクロール動作を抑制
+  if (mouseX >= 0 && mouseX <= currentPuzzleWidth && mouseY >= 0 && mouseY <= currentPuzzleWidth) {
+    return false;
+  }
+  return true; // キャンバス外ならデフォルト動作を許可
 }
