@@ -9,7 +9,10 @@ let frameColor;                 // 外枠の色 (濃い木目調)
 let puzzleAreaBackgroundColor;  // タイルが置かれるエリアの背景色 (中間色の木目調)
 let tileColor;                  // タイルの色 (明るい木目調)
 let tileStrokeColor;            // タイルの境界線の色
+let emptyTileColor;             // 色: 空のタイルの色
+let numberColor;                // 色: 数字の色
 const TILE_STROKE_WEIGHT = 2;   // タイルの境界線の太さ
+const POP_FONT = 'Verdana';     // フォント: 親しみやすいポップなフォント
 
 function setup() {
   createCanvas(CANVAS_SIZE, CANVAS_SIZE);
@@ -24,10 +27,13 @@ function setup() {
   puzzleAreaBackgroundColor = color(139, 69, 19); // 例: サドルブラウン (チェリーウッド風)
   tileColor = color(222, 184, 135);            // 例: バーリーウッド (パイン材風)
   tileStrokeColor = color(101, 67, 33);        // 例: タイルより濃い茶色
+  emptyTileColor = color(205, 170, 125);       // 例: 薄いベージュ系の木目調 (空きスロット用)
+  numberColor = color(50, 25, 0);              // 例: 非常に濃い茶色 (数字用)
+
 
   // 今回は静的な描画なので、draw()のループを停止します。
   // アニメーションやインタラクションを追加する際にコメントアウトまたは削除してください。
-  noLoop();
+  noLoop(); // 静的な描画のためループ停止
 }
 
 function draw() {
@@ -37,28 +43,47 @@ function draw() {
   // 2. タイルが配置されるエリアの背景を描画
   //    このエリアは外枠の内側に配置される
   fill(puzzleAreaBackgroundColor);
-  noStroke(); // この背景には枠線なし
+  noStroke();
   rect(
-    borderThickness, // X座標
-    borderThickness, // Y座標
-    squareSize * GRID_COUNT, // 幅 (タイル4つ分)
-    squareSize * GRID_COUNT  // 高さ (タイル4つ分)
+    borderThickness,
+    borderThickness,
+    squareSize * GRID_COUNT,
+    squareSize * GRID_COUNT
   );
 
-  // 3. 4x4のグリッドに16個の正方形（タイル）を描画
-  fill(tileColor);
-  stroke(tileStrokeColor);
-  strokeWeight(TILE_STROKE_WEIGHT);
+  // 3. 4x4のグリッドにタイルと数字を描画
+  let tileNumber = 1; // 表示する数字のカウンター
+
+  textFont(POP_FONT);
+  textAlign(CENTER, CENTER); // テキストを中央揃えに
 
   for (let row = 0; row < GRID_COUNT; row++) {
     for (let col = 0; col < GRID_COUNT; col++) {
       // 各タイルの左上の座標を計算
       let x = borderThickness + col * squareSize;
       let y = borderThickness + row * squareSize;
-      
-      // 正方形を描画
-      // rect(x, y, squareSize, squareSize); // 角丸なしの場合
-      rect(x, y, squareSize, squareSize, 5); // 角を少し丸めて、より柔らかな木製感を出す場合 (半径5)
+
+      // 右下のマスかどうかを判定
+      if (row === GRID_COUNT - 1 && col === GRID_COUNT - 1) {
+        // 空白のマス
+        fill(emptyTileColor);
+        stroke(tileStrokeColor); // 枠線は他のタイルと統一
+        strokeWeight(TILE_STROKE_WEIGHT);
+        rect(x, y, squareSize, squareSize, 5); // 角丸
+      } else {
+        // 数字が入るマス
+        fill(tileColor);
+        stroke(tileStrokeColor);
+        strokeWeight(TILE_STROKE_WEIGHT);
+        rect(x, y, squareSize, squareSize, 5); // 角丸
+
+        // 数字を描画
+        fill(numberColor); // 数字の色
+        noStroke(); // 数字には枠線なしの方が見やすい
+        textSize(squareSize * 0.5); // タイルの半分の高さ程度の文字サイズ
+        text(tileNumber, x + squareSize / 2, y + squareSize / 2);
+        tileNumber++;
+      }
     }
   }
 }
