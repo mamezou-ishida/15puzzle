@@ -27,6 +27,9 @@ let animatingTileTargetGridR, animatingTileTargetGridC; // 移動先
 let animationProgress = 0; // 0.0 から 1.0
 const ANIMATION_DURATION = 100; // 0.1秒 (ミリ秒)
 
+// UI要素
+let scrambleButton;
+
 function setup() {
   createCanvas(CANVAS_SIZE, CANVAS_SIZE);
 
@@ -44,6 +47,47 @@ function setup() {
   numberColor = color(50, 25, 0);
 
   // グリッドの初期化
+  initializeGrid(); // グリッド初期化を関数に分離
+
+  // スクランブルボタンの作成と設定
+  scrambleButton = createButton('Scramble (S)');
+  // ボタンの位置をキャンバスの下に調整
+  // HTMLの構成によって微調整が必要な場合があります
+  scrambleButton.position(borderThickness, CANVAS_SIZE + borderThickness + 10);
+  // scrambleButton.mousePressed(scramblePuzzle); // ← この行は下の新しいmousePressedに統合されます
+
+  // ボタンのスタイルをポップに
+  scrambleButton.style('font-family', POP_FONT);
+  scrambleButton.style('font-size', '16px');
+  scrambleButton.style('background-color', color(255, 193, 7)); // Amber (明るい黄色系)
+  scrambleButton.style('color', color(33, 33, 33)); // Dark Grey
+  scrambleButton.style('padding', '10px 18px');
+  scrambleButton.style('border', 'none');
+  scrambleButton.style('border-radius', '8px');
+  scrambleButton.style('cursor', 'pointer');
+  scrambleButton.style('box-shadow', '0 3px 2px rgba(0, 0, 0, 0.2)');
+  scrambleButton.style('transition', 'background-color 0.2s, box-shadow 0.2s, transform 0.1s');
+
+  scrambleButton.mouseOver(() => {
+    scrambleButton.style('background-color', color(255, 204, 51)); // 少し明るいAmber
+    scrambleButton.style('box-shadow', '0 4px 3px rgba(0, 0, 0, 0.3)');
+  });
+
+  scrambleButton.mouseOut(() => {
+    scrambleButton.style('background-color', color(255, 193, 7)); // 元のAmber
+    scrambleButton.style('box-shadow', '0 3px 2px rgba(0, 0, 0, 0.2)');
+    scrambleButton.style('transform', 'translateY(0px)'); // 沈み込みをリセット
+  });
+
+  scrambleButton.mousePressed(() => {
+    scrambleButton.style('background-color', color(255, 160, 0)); // 押された時の濃いAmber
+    scrambleButton.style('box-shadow', '0 1px 1px rgba(0, 0, 0, 0.2)');
+    scrambleButton.style('transform', 'translateY(2px)'); // 少し沈む
+    scramblePuzzle(); // 元の機能を呼び出す
+  });
+}
+
+function initializeGrid() {
   grid = Array(GRID_COUNT).fill(null).map(() => Array(GRID_COUNT).fill(0));
   let num = 1;
   for (let r = 0; r < GRID_COUNT; r++) {
@@ -57,7 +101,7 @@ function setup() {
       }
     }
   }
-  // noLoop() を削除し、draw()が継続実行されるようにする
+  // noLoop() はアニメーションのために削除済み
 }
 
 function draw() {
@@ -84,9 +128,11 @@ function draw() {
     for (let c = 0; c < GRID_COUNT; c++) {
       let x = borderThickness + c * squareSize;
       let y = borderThickness + r * squareSize;
-      
+
+      // アニメーション中のタイルの移動元は、一時的に空白として描画
+      // それ以外のタイルはgrid配列に基づいて描画
       if (isAnimating && r === animatingTileStartGridR && c === animatingTileStartGridC) {
-        // アニメーション中のタイルの移動元は、一時的に空白として描画
+         // アニメーション中のタイルの移動元は、一時的に空白として描画
         fill(emptyTileColor);
         stroke(tileStrokeColor);
         strokeWeight(TILE_STROKE_WEIGHT);
@@ -141,7 +187,7 @@ function draw() {
       grid[animatingTileTargetGridR][animatingTileTargetGridC] = animatingTileValue;
       grid[animatingTileStartGridR][animatingTileStartGridC] = EMPTY_SLOT_VALUE;
       // 空白マスの新しい位置を更新 (タイルが元々あった場所)
-      emptyRow = animatingTileStartGridR;
+      emptyRow = animatingTileStartGridR; // ここが重要：空白はタイルが「来た元」の場所になる
       emptyCol = animatingTileStartGridC;
     }
   }
@@ -150,6 +196,11 @@ function draw() {
 function keyPressed() {
   if (isAnimating) { // アニメーション中は新しい移動を受け付けない
     return;
+  }
+
+  if (key === 's' || key === 'S') { // Sキーでスクランブル
+    scramblePuzzle();
+    return; // Sキー処理後は他のキー処理をしない
   }
 
   let tileToMoveR = -1; // 移動するタイルの行
@@ -185,5 +236,61 @@ function keyPressed() {
     animatingTileTargetGridC = emptyCol;
 
     // gridの実際の更新はアニメーション完了後に行う
+  }
+}
+
+function scramblePuzzle() {
+  if (isAnimating) return; // アニメーション中はスクランブルしない
+
+  const SCRAMBLE_MOVES = 150; // シャッフル回数
+  let lastEmptySlotMoveDirection = -1; // 空白マスの直前の移動方向: 0:UP, 1:DOWN, 2:LEFT, 3:RIGHT
+
+  // 初期状態に戻してからシャッフルを開始
+  initializeGrid();
+
+  for (let i = 0; i < SCRAMBLE_MOVES; i++) {
+    let possibleNextEmptySlotPositions = [];
+
+    // 空白マスが次に移動できる位置の候補
+    // UP: 空白マスが上に移動 (タイルは下から空白マスへ)
+    if (emptyRow > 0 && lastEmptySlotMoveDirection !== 1) { // 直前がDOWNでなければ
+      possibleNextEmptySlotPositions.push({ r: emptyRow - 1, c: emptyCol, moveDirection: 0 });
+    }
+    // DOWN: 空白マスが下に移動 (タイルは上から空白マスへ)
+    if (emptyRow < GRID_COUNT - 1 && lastEmptySlotMoveDirection !== 0) { // 直前がUPでなければ
+      possibleNextEmptySlotPositions.push({ r: emptyRow + 1, c: emptyCol, moveDirection: 1 });
+    }
+    // LEFT: 空白マスが左に移動 (タイルは右から空白マスへ)
+    if (emptyCol > 0 && lastEmptySlotMoveDirection !== 3) { // 直前がRIGHTでなければ
+      possibleNextEmptySlotPositions.push({ r: emptyRow, c: emptyCol - 1, moveDirection: 2 });
+    }
+    // RIGHT: 空白マスが右に移動 (タイルは左から空白マスへ)
+    if (emptyCol < GRID_COUNT - 1 && lastEmptySlotMoveDirection !== 2) { // 直前がLEFTでなければ
+      possibleNextEmptySlotPositions.push({ r: emptyRow, c: emptyCol + 1, moveDirection: 3 });
+    }
+
+    // 行き場がない場合（袋小路で直前の手しか戻れない場合など）は、制限を解除して全ての有効な手を候補にする
+    if (possibleNextEmptySlotPositions.length === 0) {
+      if (emptyRow > 0) possibleNextEmptySlotPositions.push({ r: emptyRow - 1, c: emptyCol, moveDirection: 0 });
+      if (emptyRow < GRID_COUNT - 1) possibleNextEmptySlotPositions.push({ r: emptyRow + 1, c: emptyCol, moveDirection: 1 });
+      if (emptyCol > 0) possibleNextEmptySlotPositions.push({ r: emptyRow, c: emptyCol - 1, moveDirection: 2 });
+      if (emptyCol < GRID_COUNT - 1) possibleNextEmptySlotPositions.push({ r: emptyRow, c: emptyCol + 1, moveDirection: 3 });
+      if (possibleNextEmptySlotPositions.length === 0) continue; // 万が一、それでも候補がない場合はスキップ（通常発生しない）
+    }
+
+    let chosenMove = random(possibleNextEmptySlotPositions); // p5.jsのrandom()で配列からランダムに選択
+
+    // タイルと空白マスを入れ替え
+    // grid[emptyRow][emptyCol] には、chosenMoveの位置にあるタイルが入る
+    // grid[chosenMove.r][chosenMove.c] には、EMPTY_SLOT_VALUE が入る
+    grid[emptyRow][emptyCol] = grid[chosenMove.r][chosenMove.c];
+    grid[chosenMove.r][chosenMove.c] = EMPTY_SLOT_VALUE;
+
+    // 空白マスの新しい位置を更新
+    emptyRow = chosenMove.r;
+    emptyCol = chosenMove.c;
+
+    // 空白マスの移動方向を記録
+    lastEmptySlotMoveDirection = chosenMove.moveDirection;
   }
 }
