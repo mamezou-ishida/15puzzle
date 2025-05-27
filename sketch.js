@@ -19,6 +19,14 @@ let grid; // 2D配列でタイルの数字を管理
 let emptyRow, emptyCol; // 空白マスの位置
 const EMPTY_SLOT_VALUE = 0; // 空白マスを表す値
 
+// アニメーション関連の変数
+let isAnimating = false;
+let animatingTileValue = -1;
+let animatingTileStartGridR, animatingTileStartGridC; // 移動元
+let animatingTileTargetGridR, animatingTileTargetGridC; // 移動先
+let animationProgress = 0; // 0.0 から 1.0
+const ANIMATION_DURATION = 100; // 0.1秒 (ミリ秒)
+
 function setup() {
   createCanvas(CANVAS_SIZE, CANVAS_SIZE);
 
@@ -67,70 +75,115 @@ function draw() {
     squareSize * GRID_COUNT
   );
 
-  // 3. グリッドに基づいてタイルと数字を描画
+  // 3. グリッドに基づいて静的なタイルを描画
   textFont(POP_FONT);
   textAlign(CENTER, CENTER);
   textSize(squareSize * 0.5);
 
   for (let r = 0; r < GRID_COUNT; r++) {
     for (let c = 0; c < GRID_COUNT; c++) {
-      // 各タイルの左上の座標を計算
       let x = borderThickness + c * squareSize;
       let y = borderThickness + r * squareSize;
-      let tileValue = grid[r][c];
-
-      if (tileValue === EMPTY_SLOT_VALUE) {
-        // 空白のマス
+      
+      if (isAnimating && r === animatingTileStartGridR && c === animatingTileStartGridC) {
+        // アニメーション中のタイルの移動元は、一時的に空白として描画
         fill(emptyTileColor);
         stroke(tileStrokeColor);
         strokeWeight(TILE_STROKE_WEIGHT);
         rect(x, y, squareSize, squareSize, 5);
       } else {
-        // 数字が入るマス
-        fill(tileColor);
-        stroke(tileStrokeColor);
-        strokeWeight(TILE_STROKE_WEIGHT);
-        rect(x, y, squareSize, squareSize, 5);
+        // その他のタイルは現在のgrid配列に基づいて描画
+        let tileValue = grid[r][c];
+        if (tileValue === EMPTY_SLOT_VALUE) {
+          fill(emptyTileColor);
+          stroke(tileStrokeColor);
+          strokeWeight(TILE_STROKE_WEIGHT);
+          rect(x, y, squareSize, squareSize, 5);
+        } else {
+          fill(tileColor);
+          stroke(tileStrokeColor);
+          strokeWeight(TILE_STROKE_WEIGHT);
+          rect(x, y, squareSize, squareSize, 5);
 
-        // 数字を描画
-        fill(numberColor);
-        noStroke();
-        text(tileValue, x + squareSize / 2, y + squareSize / 2);
+          fill(numberColor);
+          noStroke();
+          text(tileValue, x + squareSize / 2, y + squareSize / 2);
+        }
       }
+    }
+  }
+
+  // 4. アニメーション中のタイルを描画 (他のすべての上に)
+  if (isAnimating) {
+    animationProgress += deltaTime / ANIMATION_DURATION;
+    animationProgress = min(animationProgress, 1.0);
+
+    let startScreenX = borderThickness + animatingTileStartGridC * squareSize;
+    let startScreenY = borderThickness + animatingTileStartGridR * squareSize;
+    let targetScreenX = borderThickness + animatingTileTargetGridC * squareSize;
+    let targetScreenY = borderThickness + animatingTileTargetGridR * squareSize;
+
+    let currentX = lerp(startScreenX, targetScreenX, animationProgress);
+    let currentY = lerp(startScreenY, targetScreenY, animationProgress);
+
+    // アニメーション中のタイルを描画
+    fill(tileColor);
+    stroke(tileStrokeColor);
+    strokeWeight(TILE_STROKE_WEIGHT);
+    rect(currentX, currentY, squareSize, squareSize, 5);
+    fill(numberColor);
+    noStroke();
+    text(animatingTileValue, currentX + squareSize / 2, currentY + squareSize / 2);
+
+    if (animationProgress >= 1.0) {
+      isAnimating = false;
+      // アニメーション完了後、gridの状態を更新
+      grid[animatingTileTargetGridR][animatingTileTargetGridC] = animatingTileValue;
+      grid[animatingTileStartGridR][animatingTileStartGridC] = EMPTY_SLOT_VALUE;
+      // 空白マスの新しい位置を更新 (タイルが元々あった場所)
+      emptyRow = animatingTileStartGridR;
+      emptyCol = animatingTileStartGridC;
     }
   }
 }
 
 function keyPressed() {
-  let targetRow = emptyRow;
-  let targetCol = emptyCol;
-  let moved = false;
-
-  if (keyCode === UP_ARROW && emptyRow < GRID_COUNT - 1) {
-    // 空白マスの下にあるタイルを上に移動
-    targetRow = emptyRow + 1;
-    moved = true;
-  } else if (keyCode === DOWN_ARROW && emptyRow > 0) {
-    // 空白マスの上にあるタイルを下に移動
-    targetRow = emptyRow - 1;
-    moved = true;
-  } else if (keyCode === LEFT_ARROW && emptyCol < GRID_COUNT - 1) {
-    // 空白マスの右にあるタイルを左に移動
-    targetCol = emptyCol + 1;
-    moved = true;
-  } else if (keyCode === RIGHT_ARROW && emptyCol > 0) {
-    // 空白マスの左にあるタイルを右に移動
-    targetCol = emptyCol - 1;
-    moved = true;
+  if (isAnimating) { // アニメーション中は新しい移動を受け付けない
+    return;
   }
 
-  if (moved) {
-    // タイルと空白マスを入れ替え
-    grid[emptyRow][emptyCol] = grid[targetRow][targetCol];
-    grid[targetRow][targetCol] = EMPTY_SLOT_VALUE;
-    // 空白マスの位置を更新
-    emptyRow = targetRow;
-    emptyCol = targetCol;
-    // redraw(); // noLoop() を使用していない場合は不要。draw()が自動で再描画します。
+  let tileToMoveR = -1; // 移動するタイルの行
+  let tileToMoveC = -1; // 移動するタイルの列
+
+  // 押されたキーと空白マスの位置に基づいて、移動するタイルを決定
+  if (keyCode === UP_ARROW && emptyRow < GRID_COUNT - 1) {
+    // 空白マスの下にあるタイル (emptyRow + 1, emptyCol) を上に移動
+    tileToMoveR = emptyRow + 1;
+    tileToMoveC = emptyCol;
+  } else if (keyCode === DOWN_ARROW && emptyRow > 0) {
+    // 空白マスの上にあるタイル (emptyRow - 1, emptyCol) を下に移動
+    tileToMoveR = emptyRow - 1;
+    tileToMoveC = emptyCol;
+  } else if (keyCode === LEFT_ARROW && emptyCol < GRID_COUNT - 1) {
+    // 空白マスの右にあるタイル (emptyRow, emptyCol + 1) を左に移動
+    tileToMoveR = emptyRow;
+    tileToMoveC = emptyCol + 1;
+  } else if (keyCode === RIGHT_ARROW && emptyCol > 0) {
+    // 空白マスの左にあるタイル (emptyRow, emptyCol - 1) を右に移動
+    tileToMoveR = emptyRow;
+    tileToMoveC = emptyCol - 1;
+  }
+
+  if (tileToMoveR !== -1) { // 有効な移動が検出された場合
+    isAnimating = true;
+    animationProgress = 0; // アニメーション進行度をリセット
+
+    animatingTileValue = grid[tileToMoveR][tileToMoveC];
+    animatingTileStartGridR = tileToMoveR;
+    animatingTileStartGridC = tileToMoveC;
+    animatingTileTargetGridR = emptyRow; // タイルは現在の空白マスへ移動
+    animatingTileTargetGridC = emptyCol;
+
+    // gridの実際の更新はアニメーション完了後に行う
   }
 }
