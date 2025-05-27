@@ -1,7 +1,64 @@
+// グローバル定数と変数
+const CANVAS_SIZE = 400;
+const GRID_COUNT = 4; // 4x4のグリッド
+let squareSize;       // 各正方形（タイル）の一辺の長さ
+let borderThickness;  // グリッド周囲の枠の太さ
+
+// 色の定義 (setup内でp5.Colorオブジェクトとして初期化)
+let frameColor;                 // 外枠の色 (濃い木目調)
+let puzzleAreaBackgroundColor;  // タイルが置かれるエリアの背景色 (中間色の木目調)
+let tileColor;                  // タイルの色 (明るい木目調)
+let tileStrokeColor;            // タイルの境界線の色
+const TILE_STROKE_WEIGHT = 2;   // タイルの境界線の太さ
+
 function setup() {
-  createCanvas(400, 400);
+  createCanvas(CANVAS_SIZE, CANVAS_SIZE);
+
+  // 寸法計算
+  // squareSize * (GRID_COUNT + 1/2) = CANVAS_SIZE という関係から導出
+  squareSize = (2 * CANVAS_SIZE) / (2 * GRID_COUNT + 1);
+  borderThickness = squareSize / 4;
+
+  // 色の初期化 (木製風の色合い)
+  frameColor = color(85, 57, 30);              // 例: ダークウォールナット
+  puzzleAreaBackgroundColor = color(139, 69, 19); // 例: サドルブラウン (チェリーウッド風)
+  tileColor = color(222, 184, 135);            // 例: バーリーウッド (パイン材風)
+  tileStrokeColor = color(101, 67, 33);        // 例: タイルより濃い茶色
+
+  // 今回は静的な描画なので、draw()のループを停止します。
+  // アニメーションやインタラクションを追加する際にコメントアウトまたは削除してください。
+  noLoop();
 }
 
 function draw() {
-  background(220);
+  // 1. 外枠を描画 (キャンバス全体を外枠の色で塗りつぶす)
+  background(frameColor);
+
+  // 2. タイルが配置されるエリアの背景を描画
+  //    このエリアは外枠の内側に配置される
+  fill(puzzleAreaBackgroundColor);
+  noStroke(); // この背景には枠線なし
+  rect(
+    borderThickness, // X座標
+    borderThickness, // Y座標
+    squareSize * GRID_COUNT, // 幅 (タイル4つ分)
+    squareSize * GRID_COUNT  // 高さ (タイル4つ分)
+  );
+
+  // 3. 4x4のグリッドに16個の正方形（タイル）を描画
+  fill(tileColor);
+  stroke(tileStrokeColor);
+  strokeWeight(TILE_STROKE_WEIGHT);
+
+  for (let row = 0; row < GRID_COUNT; row++) {
+    for (let col = 0; col < GRID_COUNT; col++) {
+      // 各タイルの左上の座標を計算
+      let x = borderThickness + col * squareSize;
+      let y = borderThickness + row * squareSize;
+      
+      // 正方形を描画
+      // rect(x, y, squareSize, squareSize); // 角丸なしの場合
+      rect(x, y, squareSize, squareSize, 5); // 角を少し丸めて、より柔らかな木製感を出す場合 (半径5)
+    }
+  }
 }
