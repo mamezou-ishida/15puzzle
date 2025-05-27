@@ -14,6 +14,11 @@ let numberColor;                // 色: 数字の色
 const TILE_STROKE_WEIGHT = 2;   // タイルの境界線の太さ
 const POP_FONT = 'Verdana';     // フォント: 親しみやすいポップなフォント
 
+// パズル状態の管理
+let grid; // 2D配列でタイルの数字を管理
+let emptyRow, emptyCol; // 空白マスの位置
+const EMPTY_SLOT_VALUE = 0; // 空白マスを表す値
+
 function setup() {
   createCanvas(CANVAS_SIZE, CANVAS_SIZE);
 
@@ -22,18 +27,29 @@ function setup() {
   squareSize = (2 * CANVAS_SIZE) / (2 * GRID_COUNT + 1);
   borderThickness = squareSize / 4;
 
-  // 色の初期化 (木製風の色合い)
-  frameColor = color(85, 57, 30);              // 例: ダークウォールナット
-  puzzleAreaBackgroundColor = color(139, 69, 19); // 例: サドルブラウン (チェリーウッド風)
-  tileColor = color(222, 184, 135);            // 例: バーリーウッド (パイン材風)
-  tileStrokeColor = color(101, 67, 33);        // 例: タイルより濃い茶色
-  emptyTileColor = color(205, 170, 125);       // 例: 薄いベージュ系の木目調 (空きスロット用)
-  numberColor = color(50, 25, 0);              // 例: 非常に濃い茶色 (数字用)
+  // 色の初期化
+  frameColor = color(85, 57, 30);
+  puzzleAreaBackgroundColor = color(139, 69, 19);
+  tileColor = color(222, 184, 135);
+  tileStrokeColor = color(101, 67, 33);
+  emptyTileColor = color(205, 170, 125);
+  numberColor = color(50, 25, 0);
 
-
-  // 今回は静的な描画なので、draw()のループを停止します。
-  // アニメーションやインタラクションを追加する際にコメントアウトまたは削除してください。
-  noLoop(); // 静的な描画のためループ停止
+  // グリッドの初期化
+  grid = Array(GRID_COUNT).fill(null).map(() => Array(GRID_COUNT).fill(0));
+  let num = 1;
+  for (let r = 0; r < GRID_COUNT; r++) {
+    for (let c = 0; c < GRID_COUNT; c++) {
+      if (r === GRID_COUNT - 1 && c === GRID_COUNT - 1) {
+        grid[r][c] = EMPTY_SLOT_VALUE;
+        emptyRow = r;
+        emptyCol = c;
+      } else {
+        grid[r][c] = num++;
+      }
+    }
+  }
+  // noLoop() を削除し、draw()が継続実行されるようにする
 }
 
 function draw() {
@@ -51,39 +67,70 @@ function draw() {
     squareSize * GRID_COUNT
   );
 
-  // 3. 4x4のグリッドにタイルと数字を描画
-  let tileNumber = 1; // 表示する数字のカウンター
-
+  // 3. グリッドに基づいてタイルと数字を描画
   textFont(POP_FONT);
-  textAlign(CENTER, CENTER); // テキストを中央揃えに
+  textAlign(CENTER, CENTER);
+  textSize(squareSize * 0.5);
 
-  for (let row = 0; row < GRID_COUNT; row++) {
-    for (let col = 0; col < GRID_COUNT; col++) {
+  for (let r = 0; r < GRID_COUNT; r++) {
+    for (let c = 0; c < GRID_COUNT; c++) {
       // 各タイルの左上の座標を計算
-      let x = borderThickness + col * squareSize;
-      let y = borderThickness + row * squareSize;
+      let x = borderThickness + c * squareSize;
+      let y = borderThickness + r * squareSize;
+      let tileValue = grid[r][c];
 
-      // 右下のマスかどうかを判定
-      if (row === GRID_COUNT - 1 && col === GRID_COUNT - 1) {
+      if (tileValue === EMPTY_SLOT_VALUE) {
         // 空白のマス
         fill(emptyTileColor);
-        stroke(tileStrokeColor); // 枠線は他のタイルと統一
+        stroke(tileStrokeColor);
         strokeWeight(TILE_STROKE_WEIGHT);
-        rect(x, y, squareSize, squareSize, 5); // 角丸
+        rect(x, y, squareSize, squareSize, 5);
       } else {
         // 数字が入るマス
         fill(tileColor);
         stroke(tileStrokeColor);
         strokeWeight(TILE_STROKE_WEIGHT);
-        rect(x, y, squareSize, squareSize, 5); // 角丸
+        rect(x, y, squareSize, squareSize, 5);
 
         // 数字を描画
-        fill(numberColor); // 数字の色
-        noStroke(); // 数字には枠線なしの方が見やすい
-        textSize(squareSize * 0.5); // タイルの半分の高さ程度の文字サイズ
-        text(tileNumber, x + squareSize / 2, y + squareSize / 2);
-        tileNumber++;
+        fill(numberColor);
+        noStroke();
+        text(tileValue, x + squareSize / 2, y + squareSize / 2);
       }
     }
+  }
+}
+
+function keyPressed() {
+  let targetRow = emptyRow;
+  let targetCol = emptyCol;
+  let moved = false;
+
+  if (keyCode === UP_ARROW && emptyRow < GRID_COUNT - 1) {
+    // 空白マスの下にあるタイルを上に移動
+    targetRow = emptyRow + 1;
+    moved = true;
+  } else if (keyCode === DOWN_ARROW && emptyRow > 0) {
+    // 空白マスの上にあるタイルを下に移動
+    targetRow = emptyRow - 1;
+    moved = true;
+  } else if (keyCode === LEFT_ARROW && emptyCol < GRID_COUNT - 1) {
+    // 空白マスの右にあるタイルを左に移動
+    targetCol = emptyCol + 1;
+    moved = true;
+  } else if (keyCode === RIGHT_ARROW && emptyCol > 0) {
+    // 空白マスの左にあるタイルを右に移動
+    targetCol = emptyCol - 1;
+    moved = true;
+  }
+
+  if (moved) {
+    // タイルと空白マスを入れ替え
+    grid[emptyRow][emptyCol] = grid[targetRow][targetCol];
+    grid[targetRow][targetCol] = EMPTY_SLOT_VALUE;
+    // 空白マスの位置を更新
+    emptyRow = targetRow;
+    emptyCol = targetCol;
+    // redraw(); // noLoop() を使用していない場合は不要。draw()が自動で再描画します。
   }
 }
