@@ -28,7 +28,18 @@ let animationProgress = 0; // 0.0 から 1.0
 const ANIMATION_DURATION = 100; // 0.1秒 (ミリ秒)
 
 // UI要素
+let uiContainer;
 let scrambleButton;
+let timerDisplay;
+
+// タイマー状態
+let startTime = 0;
+let elapsedTime = 0; // in seconds
+let isTimerRunning = false;
+let firstMoveMadeAfterScramble = false;
+let isPuzzleSolved = false;
+let hasBeenScrambled = false; // パズルがスクランブルされたかどうかのフラグ
+let defaultTimerColor;
 
 function setup() {
   createCanvas(CANVAS_SIZE, CANVAS_SIZE);
@@ -45,16 +56,23 @@ function setup() {
   tileStrokeColor = color(101, 67, 33);
   emptyTileColor = color(205, 170, 125);
   numberColor = color(50, 25, 0);
+  defaultTimerColor = numberColor; // タイマーのデフォルト色
 
   // グリッドの初期化
   initializeGrid(); // グリッド初期化を関数に分離
 
+  // UIコンテナの作成 (ボタンとタイマーを中央揃えにするため)
+  uiContainer = createDiv('');
+  uiContainer.style('width', CANVAS_SIZE + 'px');
+  uiContainer.style('text-align', 'center'); // コンテナ内のブロック要素を中央揃えにするための準備
+  // キャンバスの下に配置 (キャンバスが(0,0)にあると仮定)
+  uiContainer.position(0, CANVAS_SIZE + borderThickness / 2 + 5); // Y位置を調整
+
   // スクランブルボタンの作成と設定
   scrambleButton = createButton('Scramble (S)');
-  // ボタンの位置をキャンバスの下に調整
-  // HTMLの構成によって微調整が必要な場合があります
-  scrambleButton.position(borderThickness, CANVAS_SIZE + borderThickness + 10);
-  // scrambleButton.mousePressed(scramblePuzzle); // ← この行は下の新しいmousePressedに統合されます
+  scrambleButton.parent(uiContainer);
+  scrambleButton.style('display', 'block'); // 中央揃えのためにブロック要素に
+  scrambleButton.style('margin', '0 auto 10px auto'); // 上下マージンと左右autoで中央揃え
 
   // ボタンのスタイルをポップに
   scrambleButton.style('font-family', POP_FONT);
@@ -85,6 +103,14 @@ function setup() {
     scrambleButton.style('transform', 'translateY(2px)'); // 少し沈む
     scramblePuzzle(); // 元の機能を呼び出す
   });
+
+  // タイマー表示の作成
+  timerDisplay = createP('0.0 秒');
+  timerDisplay.parent(uiContainer);
+  timerDisplay.style('font-family', POP_FONT);
+  timerDisplay.style('font-size', '30px');
+  timerDisplay.style('color', defaultTimerColor.toString());
+  timerDisplay.style('margin', '0 auto'); // 中央揃え
 }
 
 function initializeGrid() {
@@ -101,6 +127,7 @@ function initializeGrid() {
       }
     }
   }
+  hasBeenScrambled = false; // 初期状態ではスクランブルされていない
   // noLoop() はアニメーションのために削除済み
 }
 
@@ -189,7 +216,30 @@ function draw() {
       // 空白マスの新しい位置を更新 (タイルが元々あった場所)
       emptyRow = animatingTileStartGridR; // ここが重要：空白はタイルが「来た元」の場所になる
       emptyCol = animatingTileStartGridC;
+
+      // アニメーション完了後、タイマー開始条件と完成チェック
+      if (hasBeenScrambled && !firstMoveMadeAfterScramble && !isPuzzleSolved) {
+        // スクランブル後、最初の有効な手でタイマー開始
+        isTimerRunning = true;
+        startTime = millis();
+        elapsedTime = 0; // 表示上のリセット
+        firstMoveMadeAfterScramble = true;
+        timerDisplay.style('color', defaultTimerColor.toString()); // タイマー色をデフォルトに
+      }
+      checkIfSolved();
     }
+  }
+
+  // タイマー表示の更新
+  if (isTimerRunning) {
+    elapsedTime = (millis() - startTime) / 1000.0;
+    timerDisplay.html(elapsedTime.toFixed(1) + ' 秒');
+  } else if (firstMoveMadeAfterScramble || elapsedTime > 0) {
+    // タイマーが停止していて、一度でも動いたことがある場合 (完成時など)
+    timerDisplay.html(elapsedTime.toFixed(1) + ' 秒');
+  } else {
+    // 初期状態またはスクランブル直後
+    timerDisplay.html('0.0 秒');
   }
 }
 
@@ -242,11 +292,20 @@ function keyPressed() {
 function scramblePuzzle() {
   if (isAnimating) return; // アニメーション中はスクランブルしない
 
+  // タイマーリセット
+  isTimerRunning = false;
+  elapsedTime = 0;
+  startTime = 0;
+  firstMoveMadeAfterScramble = false;
+  isPuzzleSolved = false; // パズル未完成状態に
+  // hasBeenScrambled は initializeGrid の後で true に設定
+  timerDisplay.html('0.0 秒');
+  timerDisplay.style('color', defaultTimerColor.toString());
+
   const SCRAMBLE_MOVES = 150; // シャッフル回数
   let lastEmptySlotMoveDirection = -1; // 空白マスの直前の移動方向: 0:UP, 1:DOWN, 2:LEFT, 3:RIGHT
-
-  // 初期状態に戻してからシャッフルを開始
   initializeGrid();
+  hasBeenScrambled = true; // スクランブルされたことを記録
 
   for (let i = 0; i < SCRAMBLE_MOVES; i++) {
     let possibleNextEmptySlotPositions = [];
@@ -292,5 +351,36 @@ function scramblePuzzle() {
 
     // 空白マスの移動方向を記録
     lastEmptySlotMoveDirection = chosenMove.moveDirection;
+  }
+}
+
+function checkIfSolved() {
+  let expectedValue = 1;
+  for (let r = 0; r < GRID_COUNT; r++) {
+    for (let c = 0; c < GRID_COUNT; c++) {
+      if (r === GRID_COUNT - 1 && c === GRID_COUNT - 1) { // グリッドの最後のマス
+        if (grid[r][c] !== EMPTY_SLOT_VALUE) {
+          isPuzzleSolved = false; // 以前解決済みでも、今は違う
+          return;
+        }
+      } else {
+        if (grid[r][c] !== expectedValue) {
+          isPuzzleSolved = false; // 以前解決済みでも、今は違う
+          return;
+        }
+        expectedValue++;
+      }
+    }
+  }
+
+  // ループを抜けたらパズル完成
+  if (!isPuzzleSolved) { // まだ 'isPuzzleSolved' が true に設定されていなければ (つまり、今解決した)
+    isPuzzleSolved = true;
+    hasBeenScrambled = false; // 完成したら「スクランブル済み」フラグをリセット
+    if (isTimerRunning) { // タイマーが動いていたら止めて色を変える
+      isTimerRunning = false;
+      elapsedTime = (millis() - startTime) / 1000.0; // 最終タイムを記録
+      timerDisplay.style('color', 'red');
+    }
   }
 }
